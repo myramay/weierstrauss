@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Weierstrass Function Explorer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: #06061a;
+  color: #a8bce0;
+  font-family: 'Courier New', Courier, monospace;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Plot area ──────────────────────────────────────────── */
+#plot {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+#c {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+/* ── HUD overlay ───────────────────────────────────────── */
+#hud {
+  position: absolute;
+  top: 14px; left: 14px;
+  background: rgba(3, 3, 16, 0.9);
+  border: 1px solid rgba(55, 85, 200, 0.22);
+  border-radius: 10px;
+  padding: 13px 17px;
+  font-size: 11px;
+  line-height: 1.9;
+  pointer-events: none;
+  backdrop-filter: blur(12px);
+  min-width: 220px;
+}
+.hud-head {
+  font-size: 9px;
+  letter-spacing: 3px;
+  color: #2c3880;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.dim  { color: #324070; }
+.lit  { color: #c8d8ff; }
+.ok   { color: #16e888; }
+.warn { color: #e85555; }
+.hsep {
+  border: none;
+  border-top: 1px solid rgba(55, 85, 200, 0.14);
+  margin: 6px 0;
+}
+
+/* ── Control panel ──────────────────────────────────────── */
+#panel {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 9px 18px 10px;
+  background: #050515;
+  border-top: 1px solid rgba(55, 85, 200, 0.14);
+  flex-wrap: wrap;
+  min-height: 56px;
+}
+
+.ctrl { display: flex; flex-direction: column; gap: 3px; }
+.clabel {
+  font-size: 8.5px;
+  letter-spacing: 1.2px;
+  color: #28376a;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.crow { display: flex; align-items: center; gap: 7px; }
+
+input[type=range] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 118px;
+  height: 3px;
+  background: #0e0f2a;
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #3858c8;
+  box-shadow: 0 0 6px rgba(56,88,200,0.55);
+  cursor: pointer;
+  transition: background .12s;
+}
+input[type=range]::-webkit-slider-thumb:hover { background: #5878f0; }
+input[type=range]::-moz-range-thumb {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: #3858c8;
+  border: none;
+  cursor: pointer;
+}
+
+.cval {
+  font-size: 12px;
+  color: #c0d0f0;
+  min-width: 34px;
+  text-align: right;
+}
+
+.btn {
+  background: rgba(28, 38, 88, 0.5);
+  border: 1px solid rgba(55, 85, 200, 0.24);
+  color: #6878b8;
+  padding: 4px 11px;
+  border-radius: 5px;
+  cursor: pointer;
+  font: 9px/1 'Courier New', monospace;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  transition: all .12s;
+  white-space: nowrap;
+}
+.btn:hover { background: rgba(38, 60, 140, 0.7); color: #c8d8ff; }
+.btn.on {
+  background: rgba(18, 36, 130, 0.65);
+  border-color: rgba(70, 110, 240, 0.38);
+  color: #80a4ff;
+}
+
+#leg-wrap { flex: 1; min-width: 100px; max-width: 300px; }
+.leg-lbl {
+  font-size: 8.5px;
+  letter-spacing: 1px;
+  color: #28376a;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+#legend { display: block; width: 100%; height: 7px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<!-- ── Plot canvas ─────────────────────────────────────── -->
+<div id="plot">
+  <canvas id="c"></canvas>
+
+  <div id="hud">
+    <div class="hud-head">Weierstrass Explorer</div>
+    <div>
+      <span class="dim">W(x) = Σ</span>
+      <span class="lit"> aⁿ cos(bⁿπx)</span>
+    </div>
+    <hr class="hsep">
+    <div><span class="dim">zoom    </span><span class="lit" id="h-zoom">1.00×</span></div>
+    <div><span class="dim">depth   </span><span class="lit" id="h-depth">0.00 b-folds</span></div>
+    <div><span class="dim">center  </span><span class="lit" id="h-cx">x = 0</span></div>
+    <div><span class="dim">window  </span><span class="lit" id="h-win">Δx = 4.00</span></div>
+    <hr class="hsep">
+    <div>
+      <span class="dim">a·b = </span><span id="h-ab" class="lit">—</span>
+      <span class="dim">  threshold 5.712</span>
+    </div>
+    <div id="h-cond" class="dim">—</div>
+    <hr class="hsep">
+    <div class="dim" style="font-size:8.5px; line-height:1.6">
+      scroll → zoom in/out<br>
+      drag   → pan<br>
+      R key  → reset view
+    </div>
+  </div>
+</div>
+
+<!-- ── Controls ───────────────────────────────────────── -->
+<div id="panel">
+
+  <div class="ctrl">
+    <div class="clabel">a — amplitude decay ∈(0,1)</div>
+    <div class="crow">
+      <input type="range" id="sa" min="0.05" max="0.99" step="0.01" value="0.5">
+      <span class="cval" id="va">0.50</span>
+    </div>
+  </div>
+
+  <div class="ctrl">
+    <div class="clabel">b — frequency factor (odd int)</div>
+    <div class="crow">
+      <input type="range" id="sb" min="3" max="21" step="2" value="13">
+      <span class="cval" id="vb">13</span>
+    </div>
+  </div>
+
+  <div class="ctrl">
+    <div class="clabel">N — terms summed</div>
+    <div class="crow">
+      <input type="range" id="sN" min="1" max="20" step="1" value="10">
+      <span class="cval" id="vN">10</span>
+    </div>
+  </div>
+
+  <div class="ctrl" style="min-width:auto">
+    <div class="clabel">options</div>
+    <div class="crow" style="gap:6px">
+      <button class="btn on" id="btn-layers">Layers</button>
+      <button class="btn"    id="btn-reset">Reset</button>
+    </div>
+  </div>
+
+  <div id="leg-wrap">
+    <div class="leg-lbl">n = 0 → N  (partial sum colours)</div>
+    <canvas id="legend"></canvas>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+// ── Canvas setup ─────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const plot   = document.getElementById('plot');
+
+// ── Parameters ───────────────────────────────────────────
+let a = 0.5, b = 13, N = 10;
+let showLayers = true;
+
+// ── View state ───────────────────────────────────────────
+const BASE_SCALE = 200; // px per world-unit at zoom=1  →  shows [-2, 2] initially
+let viewCX = 0;          // world x under canvas centre
+let viewSX = BASE_SCALE; // px per world-unit (changes with zoom)
+
+const MIN_SCALE = 8;       // most zoomed-out
+const MAX_SCALE = 5e13;    // most zoomed-in (float64 limit)
+
+// ── Coord helpers ─────────────────────────────────────────
+// Defined as functions (not consts) so they always use current canvas.width
+function scnX(wx) { return canvas.width  / 2 + (wx - viewCX) * viewSX; }
+function wldX(sx) { return (sx - canvas.width  / 2) / viewSX + viewCX; }
+
+// ── Nice grid step ────────────────────────────────────────
+function niceStep(range) {
+  if (!isFinite(range) || range <= 0) return 1;
+  const raw = range / 5;
+  const e   = Math.floor(Math.log10(raw));
+  const m   = raw / Math.pow(10, e);
+  return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * Math.pow(10, e);
+}
+
+// ── Layer colour: blue(n=0) → orange(n=N-1), teal(n=N) ──
+function lCol(n, alpha) {
+  const h = 220 - (n / Math.max(N, 1)) * 190;
+  return `hsla(${h.toFixed(0)},85%,65%,${alpha})`;
+}
+
+// ── Format a number for HUD display ──────────────────────
+function fmt(x) {
+  if (x === 0) return '0';
+  const ax = Math.abs(x);
+  if (ax >= 1e6 || (ax > 0 && ax < 1e-3)) return x.toExponential(3);
+  return x.toPrecision(4);
+}
+
+// ── Legend canvas ─────────────────────────────────────────
+function drawLegend() {
+  const lc = document.getElementById('legend');
+  lc.width = Math.max(lc.clientWidth || 200, 10);
+  const lx = lc.getContext('2d');
+  const g  = lx.createLinearGradient(0, 0, lc.width, 0);
+  for (let n = 0; n <= N; n++) {
+    const t = N > 0 ? n / N : 0;
+    if (n < N) {
+      const h = 220 - t * 190;
+      g.addColorStop(t, `hsl(${h.toFixed(0)},85%,65%)`);
+    } else {
+      g.addColorStop(1, '#14f8a0'); // full-sum colour
+    }
+  }
+  lx.fillStyle = g;
+  lx.fillRect(0, 0, lc.width, lc.height);
+}
+
+// ── Main render ───────────────────────────────────────────
+function render() {
+  const W = canvas.width, H = canvas.height;
+  if (!W || !H) return;
+
+  // ─ Background with radial vignette
+  const bg = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, Math.max(W, H) * 0.75);
+  bg.addColorStop(0, '#0a0b22');
+  bg.addColorStop(1, '#04040f');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // ─ Grid
+  const visRange = W / viewSX;
+  const step     = niceStep(visRange);
+  const gx0      = Math.ceil((viewCX - visRange * 0.5) / step) * step;
+  const gxEnd    = viewCX + visRange * 0.5 + step;
+
+  ctx.lineWidth = 1;
+
+  // Vertical grid lines
+  ctx.strokeStyle = 'rgba(28, 48, 118, 0.35)';
+  for (let gx = gx0; gx <= gxEnd; gx += step) {
+    const sx = scnX(gx);
+    ctx.beginPath(); ctx.moveTo(sx, 0); ctx.lineTo(sx, H); ctx.stroke();
+  }
+
+  // x-axis
+  ctx.strokeStyle = 'rgba(50, 80, 185, 0.55)';
+  ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+
+  // y-axis (only if visible)
+  const yaxSx = scnX(0);
+  if (yaxSx > 0 && yaxSx < W) {
+    ctx.beginPath(); ctx.moveTo(yaxSx, 0); ctx.lineTo(yaxSx, H); ctx.stroke();
+  }
+
+  // Tick marks + labels
+  ctx.fillStyle    = 'rgba(48, 78, 160, 0.6)';
+  ctx.font         = '9px Courier New';
+  ctx.textBaseline = 'top';
+  ctx.strokeStyle  = 'rgba(50, 80, 185, 0.5)';
+
+  for (let gx = gx0; gx <= gxEnd; gx += step) {
+    const sx = scnX(gx);
+    if (sx < 3 || sx > W - 3) continue;
+
+    // Tick
+    ctx.beginPath();
+    ctx.moveTo(sx, H / 2 - 4); ctx.lineTo(sx, H / 2 + 4);
+    ctx.stroke();
+
+    // Label
+    const near0 = Math.abs(gx) < step * 0.05;
+    const lbl   = near0 ? '0' : gx.toPrecision(3);
+    ctx.fillText(lbl, sx + 3, H / 2 + 5);
+  }
+
+  // ─ Y scale: fit amplitude bound (1 - a^(N+1)) / (1 - a)
+  const ampBound = (1 - Math.pow(a, N + 1)) / (1 - a);
+  const yS       = (H * 0.43) / ampBound;
+
+  // ─ Sample the function
+  // We compute W_0(x), W_1(x), …, W_N(x) in one pass per x.
+  // W_k(x) = Σ_{n=0}^{k} aⁿ cos(bⁿπx)
+  const S      = Math.ceil(W * 2.5); // ≥2.5 samples per pixel
+  const stride = S + 1;
+  const pts    = new Float64Array((N + 1) * stride);
+
+  for (let i = 0; i <= S; i++) {
+    const wx = wldX((i / S) * W);
+    let sum = 0, ap = 1, bpow = 1;
+    for (let n = 0; n <= N; n++) {
+      sum   += ap * Math.cos(bpow * Math.PI * wx);
+      pts[n * stride + i] = sum;
+      ap    *= a;
+      bpow  *= b;
+    }
+  }
+
+  // ─ Draw partial-sum layers (n = 0 … N-1)
+  if (showLayers) {
+    for (let n = 0; n < N; n++) {
+      // Opacity gets slightly higher for later layers
+      const alpha = 0.20 + (n / Math.max(N - 1, 1)) * 0.18;
+      ctx.beginPath();
+      ctx.strokeStyle = lCol(n, alpha);
+      ctx.lineWidth   = 0.9;
+      for (let i = 0; i <= S; i++) {
+        const sx = (i / S) * W;
+        const sy = H / 2 - pts[n * stride + i] * yS;
+        i === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
+      }
+      ctx.stroke();
+    }
+  }
+
+  // ─ Draw full sum (layer N) — bright teal, subtle glow
+  ctx.beginPath();
+  ctx.strokeStyle  = '#14f8a0';
+  ctx.lineWidth    = 1.8;
+  ctx.shadowColor  = 'rgba(20, 248, 160, 0.28)';
+  ctx.shadowBlur   = 7;
+  for (let i = 0; i <= S; i++) {
+    const sx = (i / S) * W;
+    const sy = H / 2 - pts[N * stride + i] * yS;
+    i === 0 ? ctx.moveTo(sx, sy) : ctx.lineTo(sx, sy);
+  }
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+
+  // ─ HUD update
+  const zoom  = viewSX / BASE_SCALE;
+  const depth = Math.log(Math.max(zoom, 1e-15)) / Math.log(b);
+
+  const zFmt = zoom >= 1e9 ? zoom.toExponential(2)
+             : zoom >= 1e6 ? (zoom / 1e6).toFixed(2) + 'M'
+             : zoom >= 1e3 ? (zoom / 1e3).toFixed(2) + 'k'
+             : zoom >= 10  ? zoom.toFixed(1)
+             :                zoom.toFixed(3);
+
+  document.getElementById('h-zoom').textContent  = zFmt + '×';
+  document.getElementById('h-depth').textContent = depth.toFixed(2) + ' b-folds';
+  document.getElementById('h-cx').textContent    = 'x = ' + fmt(viewCX);
+  document.getElementById('h-win').textContent   = 'Δx = ' + fmt(visRange);
+
+  const ab  = a * b;
+  const thr = 1 + 1.5 * Math.PI; // 1 + 3π/2 ≈ 5.712
+  document.getElementById('h-ab').textContent = ab.toFixed(3);
+  const condEl     = document.getElementById('h-cond');
+  condEl.className = ab > thr ? 'ok' : 'warn';
+  condEl.textContent = ab > thr
+    ? '✓ nowhere differentiable'
+    : '✗ need ab > 1+3π/2 ≈ 5.712';
+}
+
+// ── Resize canvas ─────────────────────────────────────────
+function resize() {
+  canvas.width  = plot.clientWidth;
+  canvas.height = plot.clientHeight;
+  drawLegend();
+  render();
+}
+
+// ── Slider: a ─────────────────────────────────────────────
+document.getElementById('sa').addEventListener('input', e => {
+  a = parseFloat(e.target.value);
+  document.getElementById('va').textContent = a.toFixed(2);
+  render();
+});
+
+// ── Slider: b ─────────────────────────────────────────────
+document.getElementById('sb').addEventListener('input', e => {
+  b = parseInt(e.target.value);
+  document.getElementById('vb').textContent = b;
+  render();
+});
+
+// ── Slider: N ─────────────────────────────────────────────
+document.getElementById('sN').addEventListener('input', e => {
+  N = parseInt(e.target.value);
+  document.getElementById('vN').textContent = N;
+  drawLegend();
+  render();
+});
+
+// ── Toggle layers ─────────────────────────────────────────
+document.getElementById('btn-layers').addEventListener('click', () => {
+  showLayers = !showLayers;
+  document.getElementById('btn-layers').className = showLayers ? 'btn on' : 'btn';
+  render();
+});
+
+// ── Reset view ────────────────────────────────────────────
+function resetView() {
+  viewCX = 0;
+  viewSX = BASE_SCALE;
+  render();
+}
+document.getElementById('btn-reset').addEventListener('click', resetView);
+
+// ── Scroll to zoom (toward mouse position) ────────────────
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  const rect   = canvas.getBoundingClientRect();
+  const mx     = e.clientX - rect.left;
+  const wxPin  = wldX(mx);                       // world x under mouse
+  const factor = e.deltaY < 0 ? 1.13 : 1 / 1.13;
+  viewSX = Math.max(MIN_SCALE, Math.min(MAX_SCALE, viewSX * factor));
+  // Keep wxPin stationary under the mouse
+  viewCX = wxPin - (mx - canvas.width / 2) / viewSX;
+  render();
+}, { passive: false });
+
+// ── Drag to pan ───────────────────────────────────────────
+let dragging = false, lastMX = 0;
+
+canvas.addEventListener('mousedown', e => {
+  dragging = true;
+  lastMX   = e.clientX;
+  canvas.style.cursor = 'grabbing';
+});
+window.addEventListener('mousemove', e => {
+  if (!dragging) return;
+  viewCX -= (e.clientX - lastMX) / viewSX;
+  lastMX  = e.clientX;
+  render();
+});
+window.addEventListener('mouseup', () => {
+  dragging = false;
+  canvas.style.cursor = 'crosshair';
+});
+
+// ── Touch: pan (1 finger) & pinch-zoom (2 fingers) ────────
+let lastTX = 0, lastPinch = 0;
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (e.touches.length === 1) {
+    dragging = true;
+    lastTX   = e.touches[0].clientX;
+  } else if (e.touches.length === 2) {
+    dragging = false;
+    lastPinch = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length === 1 && dragging) {
+    viewCX -= (e.touches[0].clientX - lastTX) / viewSX;
+    lastTX  = e.touches[0].clientX;
+    render();
+  } else if (e.touches.length === 2) {
+    const t0   = e.touches[0], t1 = e.touches[1];
+    const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+    if (lastPinch > 0) {
+      const rect  = canvas.getBoundingClientRect();
+      const midX  = (t0.clientX + t1.clientX) / 2 - rect.left;
+      const wxPin = wldX(midX);
+      viewSX = Math.max(MIN_SCALE, Math.min(MAX_SCALE, viewSX * dist / lastPinch));
+      viewCX = wxPin - (midX - canvas.width / 2) / viewSX;
+      render();
+    }
+    lastPinch = dist;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', () => {
+  dragging  = false;
+  lastPinch = 0;
+}, { passive: false });
+
+// ── Keyboard shortcuts ────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const k = e.key.toLowerCase();
+  if (k === 'r') resetView();
+  if (k === 'l') {
+    showLayers = !showLayers;
+    document.getElementById('btn-layers').className = showLayers ? 'btn on' : 'btn';
+    render();
+  }
+});
+
+// ── Boot ──────────────────────────────────────────────────
+window.addEventListener('resize', resize);
+resize();
+</script>
+</body>
+</html>
